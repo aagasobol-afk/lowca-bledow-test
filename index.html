@@ -5,92 +5,221 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#111111">
 <link rel="manifest" href="manifest.json">
-<title>Łowca Błędów — TEST</title>
+
+<title>Łowca Błędów</title>
+
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+
+<script>
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+
+OneSignalDeferred.push(async function(OneSignal) {
+  await OneSignal.init({
+    appId: "a91ec73d-0089-4851-93af-5f91a5e2476a",
+    safari_web_id: "web.onesignal.auto.336e9d4c-289f-452d-8560-a451da3453b9",
+    notifyButton: {
+      enable: true
+    }
+  });
+});
+</script>
+
 <style>
-body{font-family:Arial,sans-serif;background:#111;color:#fff;margin:0;padding:24px}
-.card{max-width:560px;margin:auto;background:#1d1d1d;border-radius:18px;padding:24px}
-h1{margin-top:0}.muted{color:#aaa}.price{font-size:32px;font-weight:700;margin:16px 0}
-button{width:100%;padding:14px;margin:7px 0;border:0;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer}
-.test{background:#fff;color:#111}.buy{background:#333;color:#fff}.danger{background:#b00020;color:#fff}
-#status{margin-top:18px;padding:14px;border-radius:12px;background:#292929;line-height:1.5}
-.badge{display:inline-block;padding:6px 10px;border-radius:8px;background:#b00020}
+body {
+  font-family: Arial, sans-serif;
+  background: #111;
+  color: #fff;
+  margin: 0;
+  padding: 24px;
+}
+
+.card {
+  max-width: 560px;
+  margin: auto;
+  background: #1d1d1d;
+  border-radius: 18px;
+  padding: 24px;
+}
+
+h1 {
+  margin-top: 0;
+}
+
+.muted {
+  color: #aaa;
+}
+
+.price {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 16px 0;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  margin: 7px 0;
+  border: 0;
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.test {
+  background: #fff;
+  color: #111;
+}
+
+.buy {
+  background: #333;
+  color: #fff;
+}
+
+#status {
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #292929;
+  line-height: 1.5;
+}
+
+.badge {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #b00020;
+}
 </style>
 </head>
+
 <body>
+
 <div class="card">
+
 <h1>🦅 Łowca Błędów</h1>
-<p class="muted">Wersja PWA — test alarmu</p>
 
-<div class="badge">TEST CRITICAL</div>
-<h2>Sony A7 IV Body</h2>
-<div class="price">7 999 zł → <strong>799 zł</strong></div>
-<p>Przykładowy błąd cenowy. To nie jest prawdziwa oferta.</p>
+<p class="muted">
+Test prawdziwych powiadomień push
+</p>
 
-<button class="test" onclick="requestNotifications()">🔔 Włącz powiadomienia</button>
-<button class="test" onclick="startTest(1)">🚨 TEST ZA 1 MINUTĘ</button>
-<button class="test" onclick="startTest(5)">🚨 TEST ZA 5 MINUT</button>
-<button class="test" onclick="startTest(60)">🚨 TEST ZA 60 MINUT</button>
-<button class="buy" onclick="secureOffer()">📸 Zabezpiecz ofertę</button>
-<button class="buy" onclick="openProduct()">🛒 Kup teraz</button>
+<div class="badge">
+TEST CRITICAL
+</div>
 
-<div id="status">Status: gotowy do testu.</div>
+<h2>
+Sony A7 IV Body
+</h2>
+
+<div class="price">
+7 999 zł → <strong>799 zł</strong>
+</div>
+
+<p>
+Przykładowy błąd cenowy. To nie jest prawdziwa oferta.
+</p>
+
+<button class="test" onclick="enablePush()">
+🔔 Włącz alarm Łowcy
+</button>
+
+<button class="buy" onclick="secureOffer()">
+📸 Zabezpiecz ofertę
+</button>
+
+<button class="buy" onclick="openProduct()">
+🛒 Kup teraz
+</button>
+
+<div id="status">
+Status: oczekiwanie na uruchomienie OneSignal.
+</div>
+
 </div>
 
 <script>
-let timer=null;
 
-async function requestNotifications(){
-  if(!('Notification' in window)){
-    setStatus('Ta przeglądarka nie obsługuje powiadomień.');
-    return;
+async function enablePush() {
+
+  try {
+
+    if (!window.OneSignal) {
+
+      setStatus(
+        "OneSignal jeszcze się ładuje. Spróbuj ponownie za chwilę."
+      );
+
+      return;
+    }
+
+    await OneSignal.Notifications.requestPermission();
+
+    setStatus(
+      "🔔 Sprawdzam zgodę na powiadomienia…"
+    );
+
+    const permission =
+      await OneSignal.Notifications.permission;
+
+    if (permission) {
+
+      setStatus(
+        "✅ Powiadomienia są włączone. Możemy wysłać prawdziwy test z OneSignal."
+      );
+
+    } else {
+
+      setStatus(
+        "⚠️ Powiadomienia nie zostały włączone."
+      );
+
+    }
+
+  } catch (e) {
+
+    setStatus(
+      "❌ Błąd OneSignal: " + e.message
+    );
+
   }
-  const p=await Notification.requestPermission();
-  setStatus('Powiadomienia: '+p);
-  if(p==='granted') new Notification('🦅 Łowca Błędów — TEST',{body:'Powiadomienia są włączone.'});
 }
 
-function startTest(minutes){
-  if(timer) clearTimeout(timer);
-  const ms=minutes*60*1000;
-  const when=new Date(Date.now()+ms);
-  setStatus('🚨 Test ustawiony na '+when.toLocaleTimeString('pl-PL')+'. Możesz zamknąć ekran aplikacji.');
-  timer=setTimeout(triggerAlarm,ms);
+
+function secureOffer() {
+
+  localStorage.setItem(
+    "lowca_snapshot",
+    JSON.stringify({
+      product: "Sony A7 IV Body",
+      oldPrice: 7999,
+      detectedPrice: 799,
+      detectedAt: new Date().toISOString(),
+      url: location.href
+    })
+  );
+
+  setStatus(
+    "📸 Zapisano testowy snapshot oferty."
+  );
 }
 
-function triggerAlarm(){
-  const title='🚨 ŁOWCA BŁĘDÓW — TEST';
-  const body='Sony A7 IV: 7 999 zł → 799 zł. PRIORYTET CRITICAL.';
-  setStatus('<strong>🚨 ALARM!</strong><br>'+body);
-  if(navigator.vibrate) navigator.vibrate([500,200,500,200,900]);
-  if('Notification' in window && Notification.permission==='granted'){
-    new Notification(title,{body,tag:'lowca-test'});
-  }
-  try{
-    const ctx=new (window.AudioContext||window.webkitAudioContext)();
-    const o=ctx.createOscillator(), g=ctx.createGain();
-    o.connect(g);g.connect(ctx.destination);o.frequency.value=880;g.gain.value=.25;o.start();
-    setTimeout(()=>o.stop(),1500);
-  }catch(e){}
+
+function openProduct() {
+
+  alert(
+    "Wersja testowa — tutaj później otworzymy prawdziwy URL produktu."
+  );
+
 }
 
-function secureOffer(){
-  const data={
-    product:'Sony A7 IV Body',
-    oldPrice:7999,
-    detectedPrice:799,
-    detectedAt:new Date().toISOString(),
-    url:location.href,
-    note:'TEST — przykładowa oferta, nie jest prawdziwym zakupem.'
-  };
-  localStorage.setItem('lowca_snapshot',JSON.stringify(data));
-  setStatus('📸 Zapisano testowy snapshot oferty: '+new Date().toLocaleString('pl-PL'));
+
+function setStatus(t) {
+
+  document.getElementById("status").innerHTML = t;
+
 }
 
-function openProduct(){
-  alert('W wersji produkcyjnej ten przycisk otworzy prawdziwy URL produktu. Ten ekran jest wyłącznie testowy.');
-}
-
-function setStatus(t){document.getElementById('status').innerHTML=t;}
 </script>
+
 </body>
 </html>
