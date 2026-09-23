@@ -46,7 +46,7 @@ def classify_against_history(
     reference = Decimal(str(median(clean)))
     ratio = current / reference
 
-    if ratio <= Decimal("0.20"):
+    if ratio <= Decimal("0.15"):
         return HistoryResult(
             "CRITICAL",
             100,
