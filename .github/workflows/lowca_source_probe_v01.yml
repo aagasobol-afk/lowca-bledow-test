@@ -23,7 +23,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependency
-        run: python -m pip install requests
+        run: python -m pip install requests beautifulsoup4
 
       - name: Probe public sources
         run: python lowca_source_probe_v01.py
@@ -31,7 +31,7 @@ jobs:
       - name: Save probe results
         uses: actions/upload-artifact@v4
         with:
-          name: lowca-source-probe
-          path: lowca_source_probe.json
+          name: lowca-source-probe-v02
+          path: lowca_source_probe_v02.json
           retention-days: 7
           overwrite: true
