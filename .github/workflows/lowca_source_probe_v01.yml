@@ -31,7 +31,7 @@ jobs:
       - name: Save probe results
         uses: actions/upload-artifact@v4
         with:
-          name: lowca-source-probe-v02
-          path: lowca_source_probe_v02.json
+          name: lowca-source-probe-v03
+          path: lowca_source_probe_v03.json
           retention-days: 7
           overwrite: true
