@@ -63,7 +63,9 @@ def analyze_price(
             f"mediana historii: {history_signal.reference_price} PLN"
         )
 
-    if score >= 120:
+    # Silny strukturalny błąd ceny sam wystarcza do CRITICAL.
+    # Historia wzmacnia sygnał, ale jej brak nie może obniżyć alarmu.
+    if price_signal.level == "CRITICAL":
         level = "CRITICAL"
     elif score >= 60:
         level = "HIGH"
