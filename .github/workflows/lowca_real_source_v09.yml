@@ -1,0 +1,27 @@
+name: Lowca Bledow - real source v0.9
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mediaexpert-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependency
+        run: python -m pip install -r requirements-lowca.txt
+
+      - name: Run parser benchmark
+        run: python lowca_mediaexpert_benchmark_v09.py
+
+      - name: Read real Media Expert product
+        run: |
+          python lowca_mediaexpert_v09.py \
+            "https://www.mediaexpert.pl/foto-i-kamery/aparaty-fotograficzne/aparaty-z-wymienna-optyka-bezlustrowce/aparat-sony-alpha-ilce-7m4b"
