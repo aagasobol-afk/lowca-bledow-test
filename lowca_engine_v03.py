@@ -146,7 +146,7 @@ def classify_price_change(old: Decimal, new: Decimal) -> Detection:
         return Detection("CRITICAL", reasons, 110)
 
     # Normalne/typowe rabaty. 75% ceny bazowej oznacza maks. ok. 25% obniżki.
-    if ratio >= Decimal("0.75"):
+    if ratio >= Decimal("0.749"):
         return Detection("NORMAL", ["zmiana mieści się w zakresie zwykłej obniżki"], 10)
 
     # Duży spadek bez wystarczającego dowodu błędu.
