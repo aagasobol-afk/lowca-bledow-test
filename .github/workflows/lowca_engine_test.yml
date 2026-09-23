@@ -21,7 +21,6 @@ jobs:
       - name: Run detector
         run: python lowca_engine_v03.py
 
-
       - name: Run 100-case benchmark
         run: python lowca_benchmark_v04.py
 
@@ -36,3 +35,6 @@ jobs:
 
       - name: Run v0.8 end-to-end pipeline
         run: python lowca_e2e_benchmark_v08.py
+
+      - name: Run v0.9 Media Expert adapter benchmark
+        run: python lowca_mediaexpert_benchmark_v09.py
