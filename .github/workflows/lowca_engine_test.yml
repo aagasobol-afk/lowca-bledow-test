@@ -20,3 +20,7 @@ jobs:
 
       - name: Run detector
         run: python lowca_engine_v03.py
+
+
+      - name: Run 100-case benchmark
+        run: python lowca_benchmark_v04.py
