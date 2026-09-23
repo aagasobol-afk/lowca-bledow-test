@@ -1,0 +1,35 @@
+name: Lowca Bledow - source probe v0.1
+
+on:
+  schedule:
+    - cron: "20 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependency
+        run: python -m pip install requests
+
+      - name: Probe public sources
+        run: python lowca_source_probe_v01.py
+
+      - name: Save probe results
+        uses: actions/upload-artifact@v4
+        with:
+          name: lowca-source-probe
+          path: lowca_source_probe.json
+          retention-days: 7
+          overwrite: true
