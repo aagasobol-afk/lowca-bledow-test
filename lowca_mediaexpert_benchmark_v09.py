@@ -35,7 +35,8 @@ def run():
     assert _available(offers["availability"]) is True
 
     assert _price("7 999,00 zł") == 7999
-    assert _price("799,90") == 799.90
+    from decimal import Decimal
+    assert _price("799,90") == Decimal("799.90")
     assert _available("https://schema.org/OutOfStock") is False
 
     print("=== ŁOWCA BŁĘDÓW v0.9 — MEDIA EXPERT ADAPTER ===")
