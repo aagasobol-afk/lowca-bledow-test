@@ -1,0 +1,82 @@
+name: Lowca Bledow - real monitor v1.0
+
+on:
+  push:
+    branches: ["main"]
+  schedule:
+    - cron: "37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependency
+        run: python -m pip install -r requirements-lowca.txt beautifulsoup4
+
+      - name: Restore previous state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p previous_state
+          PREV_RUN_ID=$(gh run list --workflow lowca_real_monitor_v10.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$PREV_RUN_ID" ]; then
+            gh run download "$PREV_RUN_ID" --name lowca-state-v10 --dir previous_state || true
+          fi
+          if [ -f previous_state/lowca_live_state_v10.json ]; then
+            cp previous_state/lowca_live_state_v10.json lowca_live_state_v10.json
+          fi
+
+      - name: Read prices and analyze
+        run: python lowca_live_v10.py
+
+      - name: Send alert
+        if: hashFiles('lowca_alert_v10.json') != ''
+        env:
+          ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
+          ONESIGNAL_API_KEY: ${{ secrets.ONESIGNAL_API_KEY }}
+          ONESIGNAL_SUBSCRIPTION_ID: ${{ secrets.ONESIGNAL_SUBSCRIPTION_ID }}
+        run: |
+          python - <<'PY'
+          import json, os, requests
+          alert = json.load(open("lowca_alert_v10.json", encoding="utf-8"))
+          payload = {
+              "app_id": os.environ["ONESIGNAL_APP_ID"],
+              "target_channel": "push",
+              "include_subscription_ids": [os.environ["ONESIGNAL_SUBSCRIPTION_ID"]],
+              "headings": {"en": f"ŁOWCA BŁĘDÓW — {alert['level']}"},
+              "contents": {"en": f"{alert['product']}: {alert['price_old']} zł → {alert['price_new']} zł"},
+          }
+          r = requests.post(
+              "https://api.onesignal.com/notifications",
+              headers={
+                  "Content-Type": "application/json",
+                  "Authorization": f"Key {os.environ['ONESIGNAL_API_KEY']}",
+              },
+              json=payload,
+              timeout=20,
+          )
+          print(r.status_code, r.text)
+          r.raise_for_status()
+          PY
+
+      - name: Save state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lowca-state-v10
+          path: lowca_live_state_v10.json
+          retention-days: 30
+          overwrite: true
