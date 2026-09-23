@@ -24,3 +24,6 @@ jobs:
 
       - name: Run 100-case benchmark
         run: python lowca_benchmark_v04.py
+
+      - name: Run v0.5 history benchmark
+        run: python lowca_history_benchmark_v05.py
