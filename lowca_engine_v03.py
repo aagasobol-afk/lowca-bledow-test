@@ -107,6 +107,13 @@ def extract_fotoforma_snapshot(html: str, url: str) -> ProductSnapshot:
 
 
 def classify_price_change(old: Decimal, new: Decimal) -> Detection:
+    """
+    Kluczowa zasada: sam duży rabat nie jest błędem cenowym.
+
+    CRITICAL wymaga mocnego sygnału strukturalnego (np. usunięcie cyfry
+    albo przesunięcie przecinka). Duży, ale możliwy rabat trafia do WATCH
+    i dopiero historia/rynek/wariant może podnieść go wyżej.
+    """
     if old <= 0 or new <= 0:
         return Detection("NORMAL", ["nieprawidłowa cena bazowa"], 0)
 
@@ -117,29 +124,37 @@ def classify_price_change(old: Decimal, new: Decimal) -> Detection:
     score = 0
     reasons: list[str] = []
 
-    if ratio <= Decimal("0.15"):
-        score += 80
-        reasons.append("bardzo gwałtowny spadek ceny")
-
     old_digits = str(int(old))
-    new_digits = str(new).replace(".", "").rstrip("0")
+    new_text = format(new, "f")
+    new_digits = new_text.replace(".", "").rstrip("0")
 
-    if old_digits and (new_digits == old_digits[:-1] or new_digits == old_digits[1:]):
-        score += 30
-        reasons.append("podejrzenie przesunięcia/usunięcia cyfry")
+    # Bardzo mocny sygnał: zniknięcie jednej cyfry z początku/końca.
+    if old_digits and (
+        new_digits == old_digits[:-1] or new_digits == old_digits[1:]
+    ):
+        score += 110
+        reasons.append("podejrzenie usunięcia jednej cyfry")
 
-    if ratio >= Decimal("0.80") and score < 80:
-        return Detection("NORMAL", ["zmiana mieści się w zakresie zwykłej obniżki"], 10)
+    # Mocny sygnał: przesunięcie przecinka o 1–2 miejsca,
+    # np. 7999 -> 799.9 / 79.99.
+    for divisor in (Decimal("10"), Decimal("100")):
+        if new == old / divisor:
+            score += 110
+            reasons.append("podejrzenie przesunięcia przecinka")
+            break
 
-    if score >= 80:
+    if score >= 100:
         return Detection("CRITICAL", reasons, score)
 
-    if ratio < Decimal("0.80"):
-        score += 20
-        reasons.append("spadek ceny wymaga weryfikacji")
-        return Detection("WATCH", reasons, score)
+    # Zwykła obniżka: nie alarmujemy.
+    if ratio >= Decimal("0.80"):
+        return Detection("NORMAL", ["zmiana mieści się w zakresie zwykłej obniżki"], 10)
 
-    return Detection("NORMAL", ["brak silnego sygnału błędu"], score)
+    # Duży spadek bez strukturalnego dowodu błędu:
+    # obserwujemy, ale nie ogłaszamy pomyłki cenowej.
+    score = 30
+    reasons.append("duży spadek ceny wymaga weryfikacji")
+    return Detection("WATCH", reasons, score)
 
 
 def run_controlled_tests() -> list[tuple[str, str, str]]:
