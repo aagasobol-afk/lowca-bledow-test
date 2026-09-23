@@ -27,3 +27,6 @@ jobs:
 
       - name: Run v0.5 history benchmark
         run: python lowca_history_benchmark_v05.py
+
+      - name: Run v0.6 fusion benchmark
+        run: python lowca_fusion_benchmark_v06.py
