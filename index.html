@@ -14,13 +14,20 @@
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 
 OneSignalDeferred.push(async function(OneSignal) {
-  await OneSignal.init({
-    appId: "a91ec73d-0089-4851-93af-5f91a5e2476a",
-    safari_web_id: "web.onesignal.auto.336e9d4c-289f-452d-8560-a451da3453b9",
-    notifyButton: {
-      enable: true
-    }
-  });
+ await OneSignal.init({
+  appId: "a91ec73d-0089-4851-93af-5f91a5e2476a",
+  safari_web_id: "web.onesignal.auto.336e9d4c-289f-452d-8560-a451da3453b9",
+
+  serviceWorkerPath: "/lowca-bledow-test/OneSignalSDKWorker.js",
+
+  serviceWorkerParam: {
+    scope: "/lowca-bledow-test/"
+  },
+
+  notifyButton: {
+    enable: true
+  }
+});
 });
 </script>
 
