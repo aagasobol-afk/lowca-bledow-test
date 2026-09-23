@@ -12,6 +12,8 @@ jobs:
         env:
           ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
           ONESIGNAL_API_KEY: ${{ secrets.ONESIGNAL_API_KEY }}
+          ONESIGNAL_SUBSCRIPTION_ID: ${{ secrets.ONESIGNAL_SUBSCRIPTION_ID }}
+
         run: |
           curl -sS -X POST "https://api.onesignal.com/notifications" \
             -H "Content-Type: application/json" \
@@ -19,7 +21,11 @@ jobs:
             -d '{
               "app_id": "'"${ONESIGNAL_APP_ID}"'",
               "target_channel": "push",
-              "included_segments": ["Subscribed Users"],
-              "headings": {"en": "LOWCA BLEDOW — TEST"},
-              "contents": {"en": "Automatyczny test: OneSignal -> telefon -> zegarek."}
+              "include_subscription_ids": ["'"${ONESIGNAL_SUBSCRIPTION_ID}"'"],
+              "headings": {
+                "en": "ŁOWCA BŁĘDÓW — TEST"
+              },
+              "contents": {
+                "en": "Sony A7 IV: 7 999 zł → 799 zł. PRIORYTET CRITICAL."
+              }
             }'
