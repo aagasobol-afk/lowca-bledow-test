@@ -37,8 +37,8 @@ BAD_HINTS = (
 
 MAX_PRODUCTS_PER_STORE = 25
 MAX_CATEGORY_PAGES = 15
-MAX_VALIDATION_CANDIDATES = 70
-MAX_SITEMAP_URLS = 80
+MAX_VALIDATION_CANDIDATES = 90
+MAX_SITEMAP_URLS = 100
 
 HEADERS = {
     "User-Agent": "Lowca-Bledow/1.3 public-product-discovery",
@@ -68,7 +68,7 @@ def score_product_link(url: str) -> int:
     if any(h in low for h in PRODUCT_HINTS):
         score += 12
     if any(h in low for h in CATEGORY_HINTS):
-        score -= 12
+        score -= 30
     if any(h in low for h in BAD_HINTS):
         score -= 25
     if "?" in url:
@@ -78,8 +78,30 @@ def score_product_link(url: str) -> int:
     return score
 
 def candidate_product_links(base_url: str, html: str) -> list[str]:
-    scored = [(score_product_link(u), u) for u in extract_links(base_url, html)]
-    scored = [(s, u) for s, u in scored if s > 0]
+    links = extract_links(base_url, html)
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = tag.string or tag.get_text()
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        nodes = data if isinstance(data, list) else [data]
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            items = node.get("itemListElement")
+            if isinstance(items, list):
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    target = item.get("url")
+                    if not target and isinstance(item.get("item"), dict):
+                        target = item["item"].get("url")
+                    if isinstance(target, str):
+                        links.append(urljoin(base_url, target))
+    scored = [(score_product_link(u), u) for u in links]
+    scored = [(s, u) for s, u in scored if s > 0 and not any(h in u.lower() for h in CATEGORY_HINTS)]
     scored.sort(key=lambda x: (-x[0], x[1]))
     return [u for _, u in scored[:MAX_VALIDATION_CANDIDATES]]
 
@@ -139,7 +161,7 @@ def sitemap_candidates(session: requests.Session, home_url: str) -> list[str]:
         locs = [loc.get_text(strip=True) for loc in soup.find_all("loc")]
         for u in locs:
             low = u.lower()
-            if any(h in low for h in PRODUCT_HINTS) and not any(h in low for h in BAD_HINTS):
+            if any(h in low for h in PRODUCT_HINTS) and not any(h in low for h in BAD_HINTS) and not any(h in low for h in CATEGORY_HINTS):
                 found.append(u)
             elif u.lower().endswith(".xml") and len(found) < MAX_SITEMAP_URLS:
                 try:
@@ -149,7 +171,7 @@ def sitemap_candidates(session: requests.Session, home_url: str) -> list[str]:
                         for loc in ss.find_all("loc"):
                             v = loc.get_text(strip=True)
                             lowv = v.lower()
-                            if any(h in lowv for h in PRODUCT_HINTS) and not any(h in lowv for h in BAD_HINTS):
+                            if any(h in lowv for h in PRODUCT_HINTS) and not any(h in lowv for h in BAD_HINTS) and not any(h in lowv for h in CATEGORY_HINTS):
                                 found.append(v)
                                 if len(found) >= MAX_SITEMAP_URLS:
                                     break
