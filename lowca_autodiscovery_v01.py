@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 
 REGISTRY_FILE = Path("lowca_source_registry_v01.json")
 MAX_NEW_SOURCES = 15
-SEARCH_RESULTS_PER_QUERY = 15
+SEARCH_RESULTS_PER_QUERY = 20
 TIMEOUT = 12
 
 QUERIES = [
@@ -78,22 +78,7 @@ def search_public_web(session: requests.Session, query: str) -> list[str]:
     if not 200 <= response.status_code < 300:
         return []
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    urls = []
-    seen = set()
-    for selector in ("a.result__a[href]", "a.result-link[href]", "a[href]"):
-        for a in soup.select(selector):
-            target = unwrap_result(a.get("href", ""))
-            if not target.startswith(("http://", "https://")):
-                continue
-            host = (urlparse(target).hostname or "").lower()
-            if "duckduckgo.com" in host or target in seen:
-                continue
-            seen.add(target)
-            urls.append(target)
-            if len(urls) >= SEARCH_RESULTS_PER_QUERY:
-                return urls
-    return urls
+
 
 
 def host_from_url(url: str) -> str | None:
