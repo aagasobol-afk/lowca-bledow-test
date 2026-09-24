@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
+from lowca_autodiscovery_v01 import discover_new_sources
 from lowca_discovery_v11 import discover_all
 from lowca_fusion_v06 import analyze_price
 from lowca_public_product_v10 import fetch_public_product, snapshot_dict
@@ -39,6 +40,10 @@ def save_state(state):
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def build_product_list():
+    try:
+        discover_new_sources()
+    except Exception as exc:
+        print(f"AUTO: pominięto samodzielne odkrywanie: {type(exc).__name__}: {exc}")
     discovered = discover_all()
     if discovered:
         merged = discovered + FALLBACK_PRODUCTS
