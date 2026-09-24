@@ -10,8 +10,8 @@ import requests
 from bs4 import BeautifulSoup
 
 REGISTRY_FILE = Path("lowca_source_registry_v01.json")
-MAX_NEW_SOURCES = 12
-SEARCH_RESULTS_PER_QUERY = 12
+MAX_NEW_SOURCES = 15
+SEARCH_RESULTS_PER_QUERY = 15
 TIMEOUT = 12
 
 QUERIES = [
@@ -21,6 +21,11 @@ QUERIES = [
     "sklep internetowy dom ogród meble wyposażenie Polska",
     "sklep internetowy kosmetyki perfumy Polska",
     "sklep internetowy fotografia sprzęt foto Polska",
+    "sklep internetowy AGD RTV Polska",
+    "sklep internetowy rowery turystyka góry outdoor Polska",
+    "sklep internetowy meble wnętrza dom ogród Polska",
+    "sklep internetowy zegarki biżuteria Polska",
+    "sklep internetowy dzieci zabawki Polska",
 ]
 
 BLOCKED_HOST_PARTS = (
@@ -75,12 +80,19 @@ def search_public_web(session: requests.Session, query: str) -> list[str]:
 
     soup = BeautifulSoup(response.text, "html.parser")
     urls = []
-    for a in soup.select("a.result__a[href]"):
-        target = unwrap_result(a.get("href", ""))
-        if target.startswith(("http://", "https://")):
+    seen = set()
+    for selector in ("a.result__a[href]", "a.result-link[href]", "a[href]"):
+        for a in soup.select(selector):
+            target = unwrap_result(a.get("href", ""))
+            if not target.startswith(("http://", "https://")):
+                continue
+            host = (urlparse(target).hostname or "").lower()
+            if "duckduckgo.com" in host or target in seen:
+                continue
+            seen.add(target)
             urls.append(target)
-        if len(urls) >= SEARCH_RESULTS_PER_QUERY:
-            break
+            if len(urls) >= SEARCH_RESULTS_PER_QUERY:
+                return urls
     return urls
 
 
@@ -162,6 +174,7 @@ def discover_new_sources() -> list[tuple[str, str]]:
                 continue
             candidates.setdefault(host, f"https://{host}/")
 
+    print(f"AUTO: kandydatów po wyszukiwaniu: {len(candidates)}")
     accepted: list[tuple[str, str]] = []
     for host, url in candidates.items():
         if len(accepted) >= MAX_NEW_SOURCES:
