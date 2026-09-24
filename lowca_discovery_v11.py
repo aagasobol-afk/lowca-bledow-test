@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Łowca Błędów v1.3 — szersze odkrywanie produktów przez publiczne mapy stron."""
+"""Łowca Błędów — katalog źródeł i odkrywanie publicznych produktów."""
 from __future__ import annotations
 
 import json
@@ -8,6 +8,8 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+# Katalog jest szeroki celowo. Sklep może zostać pominięty, jeśli blokuje automatyczny
+# dostęp albo nie udostępnia czytelnych publicznych danych produktu. Nie obchodzimy blokad.
 SOURCES = [
     ("BEIKS", "https://beiks.pl/"),
     ("Cyfrowe.pl", "https://www.cyfrowe.pl/"),
@@ -19,20 +21,53 @@ SOURCES = [
     ("MODIVO", "https://modivo.pl/"),
     ("Empik", "https://www.empik.com/"),
     ("Neonet", "https://www.neonet.pl/"),
+    ("Komputronik", "https://www.komputronik.pl/"),
+    ("x-kom", "https://www.x-kom.pl/"),
+    ("RTV Euro AGD", "https://www.euro.com.pl/"),
+    ("Media Expert", "https://www.mediaexpert.pl/"),
+    ("OleOle", "https://www.oleole.pl/"),
+    ("Decathlon", "https://www.decathlon.pl/"),
+    ("8a.pl", "https://8a.pl/"),
+    ("Ceneo", "https://www.ceneo.pl/"),
+    ("Sferis", "https://www.sferis.pl/"),
+    ("Mediaarena", "https://www.mediaarena.pl/"),
+    ("Newegg PL", "https://www.newegg.com/global/pl-en/"),
+    ("Zalando", "https://www.zalando.pl/"),
+    ("CCC", "https://ccc.eu/pl/"),
+    ("Reserved", "https://www.reserved.com/pl/pl/"),
+    ("Sinsay", "https://www.sinsay.com/pl/pl/"),
+    ("4F", "https://4f.com.pl/"),
+    ("Martes", "https://martessport.com.pl/"),
+    ("Sizeer", "https://sizeer.com/"),
+    ("Answear", "https://answear.com/"),
+    ("Born2be", "https://born2be.pl/"),
+    ("Renee", "https://renee.pl/"),
+    ("Wittchen", "https://wittchen.com/"),
+    ("DOZ", "https://www.doz.pl/"),
+    ("Super-Pharm", "https://www.superpharm.pl/"),
+    ("Notino", "https://www.notino.pl/"),
+    ("Ziko", "https://www.ziko.pl/"),
+    ("MediaMarkt Austria", "https://www.mediamarkt.at/"),
+    ("Amazon PL", "https://www.amazon.pl/"),
+    ("Allegro", "https://allegro.pl/"),
+    ("Empik Foto", "https://www.empikfoto.pl/"),
 ]
 
 PRODUCT_HINTS = (
-    "/produkt", "/product", "/p/", "/item", "/obiektyw-", "/aparat-",
-    "/telefon-", "/laptop-", "/buty-", "/kurtka-", "/plecak-"
+    "/produkt", "/product", "/p/", "/item", "/products/", "/product/",
+    "/obiektyw-", "/aparat-", "/telefon-", "/laptop-", "/buty-",
+    "/kurtka-", "/plecak-", "/p/produkt-", "/towar/"
 )
 CATEGORY_HINTS = (
     "/kategoria", "/category", "/cat/", "/c/", "/szukaj", "/search",
     "/kolekcja", "/collections", "/laptopy", "/aparaty-cyfrowe",
-    "/buty", "/kurtki", "/telefony", "/odziez"
+    "/buty", "/kurtki", "/telefony", "/odziez", "/category/",
+    "/collections/"
 )
 BAD_HINTS = (
     "/pomoc", "/regulamin", "/dostawa", "/konto", "/blog", "/campaign",
-    "/kontakt", "/newsletter", "/polityka", "/faq"
+    "/kontakt", "/newsletter", "/polityka", "/faq", "/login", "/rejestracja",
+    "/cookies", "/mapa-strony"
 )
 
 MAX_PRODUCTS_PER_STORE = 25
@@ -41,7 +76,7 @@ MAX_VALIDATION_CANDIDATES = 90
 MAX_SITEMAP_URLS = 100
 
 HEADERS = {
-    "User-Agent": "Lowca-Bledow/1.3 public-product-discovery",
+    "User-Agent": "Lowca-Bledow/1.4 public-product-discovery",
     "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.7",
     "Accept": "text/html,application/xhtml+xml,application/xml",
 }
@@ -49,11 +84,22 @@ HEADERS = {
 def same_host(a: str, b: str) -> bool:
     return urlparse(a).netloc == urlparse(b).netloc
 
+def clean_url(base_url: str, href: str) -> str:
+    return urljoin(base_url, href).split("#", 1)[0]
+
+def is_relevant_url(url: str) -> bool:
+    low = url.lower()
+    return (
+        url.startswith(("http://", "https://"))
+        and not any(h in low for h in BAD_HINTS)
+        and not any(h in low for h in CATEGORY_HINTS)
+    )
+
 def extract_links(base_url: str, html: str) -> list[str]:
     soup = BeautifulSoup(html, "html.parser")
     out, seen = [], set()
     for a in soup.find_all("a", href=True):
-        href = urljoin(base_url, a["href"]).split("#", 1)[0]
+        href = clean_url(base_url, a["href"])
         if not same_host(base_url, href) or href in seen:
             continue
         if href.startswith(("mailto:", "javascript:")):
@@ -77,8 +123,7 @@ def score_product_link(url: str) -> int:
         score += 1
     return score
 
-def candidate_product_links(base_url: str, html: str) -> list[str]:
-    links = extract_links(base_url, html)
+def _jsonld_nodes(html: str):
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
         raw = tag.string or tag.get_text()
@@ -88,42 +133,39 @@ def candidate_product_links(base_url: str, html: str) -> list[str]:
             continue
         nodes = data if isinstance(data, list) else [data]
         for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            items = node.get("itemListElement")
-            if isinstance(items, list):
-                for item in items:
-                    if not isinstance(item, dict):
-                        continue
-                    target = item.get("url")
-                    if not target and isinstance(item.get("item"), dict):
-                        target = item["item"].get("url")
-                    if isinstance(target, str):
-                        links.append(urljoin(base_url, target))
+            if isinstance(node, dict):
+                yield node
+
+def candidate_product_links(base_url: str, html: str) -> list[str]:
+    links = extract_links(base_url, html)
+    for node in _jsonld_nodes(html):
+        items = node.get("itemListElement")
+        if isinstance(items, list):
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                target = item.get("url")
+                if not target and isinstance(item.get("item"), dict):
+                    target = item["item"].get("url")
+                if isinstance(target, str):
+                    links.append(clean_url(base_url, target))
     scored = [(score_product_link(u), u) for u in links]
-    scored = [(s, u) for s, u in scored if s > 0 and not any(h in u.lower() for h in CATEGORY_HINTS)]
+    scored = [
+        (s, u) for s, u in scored
+        if s > 0 and is_relevant_url(u)
+    ]
     scored.sort(key=lambda x: (-x[0], x[1]))
     return [u for _, u in scored[:MAX_VALIDATION_CANDIDATES]]
 
 def has_product_jsonld(html: str) -> bool:
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
-        raw = tag.string or tag.get_text()
-        try:
-            data = json.loads(raw)
-        except Exception:
-            continue
-        nodes = data if isinstance(data, list) else [data]
-        for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            if node.get("@type") == "Product":
-                return True
-            graph = node.get("@graph")
-            if isinstance(graph, list) and any(
-                isinstance(x, dict) and x.get("@type") == "Product" for x in graph
-            ):
-                return True
+    for node in _jsonld_nodes(html):
+        if node.get("@type") == "Product":
+            return True
+        graph = node.get("@graph")
+        if isinstance(graph, list) and any(
+            isinstance(x, dict) and x.get("@type") == "Product" for x in graph
+        ):
+            return True
     return False
 
 def validate_product(session: requests.Session, url: str) -> bool:
@@ -161,7 +203,7 @@ def sitemap_candidates(session: requests.Session, home_url: str) -> list[str]:
         locs = [loc.get_text(strip=True) for loc in soup.find_all("loc")]
         for u in locs:
             low = u.lower()
-            if any(h in low for h in PRODUCT_HINTS) and not any(h in low for h in BAD_HINTS) and not any(h in low for h in CATEGORY_HINTS):
+            if any(h in low for h in PRODUCT_HINTS) and is_relevant_url(u):
                 found.append(u)
             elif u.lower().endswith(".xml") and len(found) < MAX_SITEMAP_URLS:
                 try:
@@ -170,8 +212,7 @@ def sitemap_candidates(session: requests.Session, home_url: str) -> list[str]:
                         ss = BeautifulSoup(sr.text, "xml")
                         for loc in ss.find_all("loc"):
                             v = loc.get_text(strip=True)
-                            lowv = v.lower()
-                            if any(h in lowv for h in PRODUCT_HINTS) and not any(h in lowv for h in BAD_HINTS) and not any(h in lowv for h in CATEGORY_HINTS):
+                            if any(h in v.lower() for h in PRODUCT_HINTS) and is_relevant_url(v):
                                 found.append(v)
                                 if len(found) >= MAX_SITEMAP_URLS:
                                     break
@@ -196,11 +237,8 @@ def discover_store(session: requests.Session, store: str, home_url: str) -> list
 
     found, seen = [], set()
     candidate_urls = candidate_product_links(r.url, r.text)
-
-    # Najpierw publiczna mapa strony — zwykle daje znacznie szerszy zbiór produktów.
     candidate_urls.extend(sitemap_candidates(session, r.url))
 
-    # Następnie kilka publicznych kategorii.
     links = extract_links(r.url, r.text)
     categories = []
     for u in links:
