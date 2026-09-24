@@ -70,10 +70,10 @@ BAD_HINTS = (
     "/cookies", "/mapa-strony"
 )
 
-MAX_PRODUCTS_PER_STORE = 25
-MAX_CATEGORY_PAGES = 15
-MAX_VALIDATION_CANDIDATES = 90
-MAX_SITEMAP_URLS = 100
+MAX_PRODUCTS_PER_STORE = 75
+MAX_CATEGORY_PAGES = 20
+MAX_VALIDATION_CANDIDATES = 140
+MAX_SITEMAP_URLS = 250
 
 HEADERS = {
     "User-Agent": "Lowca-Bledow/1.4 public-product-discovery",
@@ -192,7 +192,7 @@ def sitemap_candidates(session: requests.Session, home_url: str) -> list[str]:
         pass
 
     found = []
-    for sm in sitemap_urls[:5]:
+    for sm in sitemap_urls[:8]:
         try:
             r = session.get(sm, timeout=12)
         except Exception:
