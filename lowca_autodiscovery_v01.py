@@ -66,20 +66,44 @@ def unwrap_result(href: str) -> str:
 
 
 def search_public_web(session: requests.Session, query: str) -> list[str]:
-    url = "https://html.duckduckgo.com/html/?q=" + quote_plus(query)
-    try:
-        response = session.get(url, timeout=TIMEOUT)
-    except Exception as exc:
-        print(f"AUTO: wyszukiwarka niedostępna: {type(exc).__name__}")
-        return []
-    if response.status_code in {401, 403, 429}:
-        print(f"AUTO: wyszukiwarka odmówiła dostępu HTTP {response.status_code}")
-        return []
-    if not 200 <= response.status_code < 300:
-        return []
+    engines = [
+        ("https://lite.duckduckgo.com/lite/?q=", "ddg-lite"),
+        ("https://www.google.com/search?q=", "google"),
+        ("https://www.bing.com/search?q=", "bing"),
+    ]
+    for base, engine in engines:
+        url = base + quote_plus(query)
+        try:
+            response = session.get(url, timeout=TIMEOUT)
+        except Exception as exc:
+            print(f"AUTO: {engine} niedostępna: {type(exc).__name__}")
+            continue
+        if response.status_code in {401, 403, 429}:
+            print(f"AUTO: {engine} odmówiła dostępu HTTP {response.status_code}")
+            continue
+        if not 200 <= response.status_code < 300:
+            continue
 
-
-
+        soup = BeautifulSoup(response.text, "html.parser")
+        urls, seen = [], set()
+        for a in soup.find_all("a", href=True):
+            target = unwrap_result(a.get("href", ""))
+            if target.startswith("/url?"):
+                target = unwrap_result("https://www.google.com" + target)
+            if not target.startswith(("http://", "https://")):
+                continue
+            host = (urlparse(target).hostname or "").lower()
+            if not host or any(part in host for part in BLOCKED_HOST_PARTS):
+                continue
+            if target in seen:
+                continue
+            seen.add(target)
+            urls.append(target)
+            if len(urls) >= SEARCH_RESULTS_PER_QUERY:
+                break
+        if urls:
+            return urls
+    return []
 
 def host_from_url(url: str) -> str | None:
     try:
