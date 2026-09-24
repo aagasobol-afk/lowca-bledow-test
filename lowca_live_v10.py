@@ -16,7 +16,7 @@ STATE_FILE = Path(os.getenv("LOWCA_STATE_FILE", "lowca_live_state_v10.json"))
 ALERT_FILE = Path(os.getenv("LOWCA_ALERT_FILE", "lowca_alert_v10.json"))
 MAX_HISTORY = 30
 MEGA_SALE_RATIO = Decimal("0.30")
-DISCOVERY_LIMIT = 200
+DISCOVERY_LIMIT = 300
 
 FALLBACK_PRODUCTS = [
     ("Cyfrowe.pl", "https://www.cyfrowe.pl/aparat-om-system-pen-srebrny-p.html"),
