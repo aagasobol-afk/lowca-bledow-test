@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -37,7 +38,6 @@ SOURCES = [
     ("Reserved", "https://www.reserved.com/pl/pl/"),
     ("Sinsay", "https://www.sinsay.com/pl/pl/"),
     ("4F", "https://4f.com.pl/"),
-    ("Martes", "https://martessport.com.pl/"),
     ("Sizeer", "https://sizeer.com/"),
     ("Answear", "https://answear.com/"),
     ("Born2be", "https://born2be.pl/"),
@@ -272,11 +272,35 @@ def discover_store(session: requests.Session, store: str, home_url: str) -> list
     print(f"{store}: znaleziono {len(found)} prawdziwych produktów")
     return found
 
+def registry_sources() -> list[tuple[str, str]]:
+    path = Path("lowca_source_registry_v01.json")
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    out = []
+    for item in data.get("sources", []):
+        if not isinstance(item, dict) or item.get("status") != "active":
+            continue
+        name = item.get("name")
+        url = item.get("url")
+        if isinstance(name, str) and isinstance(url, str) and url.startswith(("http://", "https://")):
+            out.append((name, url))
+    return out
+
+
 def discover_all() -> list[tuple[str, str]]:
     session = requests.Session()
     session.headers.update(HEADERS)
     out, seen = [], set()
-    for store, home_url in SOURCES:
+    source_seen = set()
+    for store, home_url in SOURCES + registry_sources():
+        source_key = (store, home_url)
+        if source_key in source_seen:
+            continue
+        source_seen.add(source_key)
         for item in discover_store(session, store, home_url):
             if item[1] not in seen:
                 out.append(item)
