@@ -76,6 +76,36 @@ def _product_jsonld(html: str) -> dict[str, Any] | None:
     return None
 
 
+def _zero_price_is_valid(html: str, available: bool | None) -> bool:
+    """0 zł uznajemy za cenę produktu tylko przy potwierdzonej dostępności i zakupie."""
+    if available is not True:
+        return False
+    text = BeautifulSoup(html, "html.parser").get_text(" ", strip=True).lower()
+    buy_markers = (
+        "dodaj do koszyka",
+        "do koszyka",
+        "kup teraz",
+        "zamów teraz",
+    )
+    has_buy_action = any(marker in text for marker in buy_markers)
+    has_zero_price = bool(re.search(r"0[\s\u00a0]*[,\.]00\s*zł|0\s*pln", text))
+    if not (has_buy_action and has_zero_price):
+        return False
+    forbidden = (
+        "dostawa 0 zł",
+        "rata 0%",
+        "od 0 zł",
+        "gratis",
+        "voucher",
+        "kod rabatowy",
+        "przy zakupie",
+        "doładowanie",
+    )
+    if any(marker in text for marker in forbidden):
+        return False
+    return True
+
+
 def fetch_public_product(url: str, store: str, timeout: int = 20) -> ProductSnapshot:
     host = urlparse(url).netloc.lower()
     if not host:
@@ -110,13 +140,17 @@ def fetch_public_product(url: str, store: str, timeout: int = 20) -> ProductSnap
     if price is None or not name:
         raise RuntimeError("Produkt nie ma czytelnej nazwy lub ceny.")
 
+    available = _availability(offers.get("availability"))
+    if price == 0 and not _zero_price_is_valid(r.text, available):
+        raise RuntimeError("Cena 0 zł nie została potwierdzona jako rzeczywista cena produktu.")
+
     return ProductSnapshot(
         name=name,
         store=store,
         url=url,
         price=price,
         currency=str(offers.get("priceCurrency") or "PLN"),
-        available=_availability(offers.get("availability")),
+        available=available,
         sku=str(product.get("sku")) if product.get("sku") else None,
         ean=str(product.get("gtin13") or product.get("gtin")) if (product.get("gtin13") or product.get("gtin")) else None,
     )
