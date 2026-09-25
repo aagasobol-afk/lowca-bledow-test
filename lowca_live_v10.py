@@ -148,7 +148,7 @@ def main():
             }
             print(
                 f"{store}: {snapshot.name} | {snapshot.price} {snapshot.currency} "
-                f"| old={old_price} | promo={promo_level or \"BRAK\"} "
+                f"| old={old_price} | promo={promo_level or 'BRAK'} "
                 f"| level={result.level if result else 'NORMAL'}"
             )
         except Exception as exc:
