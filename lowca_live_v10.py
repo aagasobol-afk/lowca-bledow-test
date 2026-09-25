@@ -16,7 +16,9 @@ from lowca_public_product_v10 import fetch_public_product, snapshot_dict
 STATE_FILE = Path(os.getenv("LOWCA_STATE_FILE", "lowca_live_state_v10.json"))
 ALERT_FILE = Path(os.getenv("LOWCA_ALERT_FILE", "lowca_alert_v10.json"))
 MAX_HISTORY = 30
-MEGA_SALE_RATIO = Decimal("0.30")
+PROMO_MIN_RATIO = Decimal("0.51")  # 49% obniżki lub więcej
+MEGA_SALE_RATIO = Decimal("0.10")  # 90% obniżki lub więcej
+STRONG_PROMO_RATIO = Decimal("0.20")  # 80–89% obniżki
 DISCOVERY_LIMIT = 300
 
 FALLBACK_PRODUCTS = [
@@ -85,14 +87,21 @@ def main():
                 else None
             )
             ratio = snapshot.price / old_price if old_price and old_price > 0 else None
-            mega_sale = ratio is not None and ratio <= MEGA_SALE_RATIO
+            promo_level = None
+            if ratio is not None and ratio <= MEGA_SALE_RATIO:
+                promo_level = "MEGA_PROMOCJA"
+            elif ratio is not None and ratio <= STRONG_PROMO_RATIO:
+                promo_level = "MOCNA_PROMOCJA"
+            elif ratio is not None and ratio <= PROMO_MIN_RATIO:
+                promo_level = "PROMOCJA"
 
+            anomaly = result and result.level in {"HIGH", "CRITICAL"}
             signature, alert_record = None, None
-            if mega_sale:
-                signature = f"{url}|MEGA_SALE|{snapshot.price}"
+            if promo_level and not anomaly:
+                signature = f"{url}|{promo_level}|{snapshot.price}"
                 alert_record = {
                     "type": "LOWCA_DEAL",
-                    "level": "MEGA_OKAZJA",
+                    "level": promo_level,
                     "score": 0,
                     "product": snapshot.name,
                     "store": store,
@@ -103,10 +112,10 @@ def main():
                     "url": url,
                     "ean": snapshot.ean,
                     "sku": snapshot.sku,
-                    "reasons": ["spadek ceny o co najmniej 70% względem poprzedniego odczytu"],
+                    "reasons": [f"spadek ceny o {((Decimal("1") - ratio) * 100):.0f}% względem poprzedniego odczytu"],
                     "checked_at": datetime.now(timezone.utc).isoformat(),
                 }
-            elif result and result.level in {"HIGH", "CRITICAL"}:
+            elif anomaly:
                 signature = f"{url}|{result.level}|{snapshot.price}"
                 alert_record = {
                     "type": "LOWCA_ALERT",
