@@ -54,13 +54,24 @@ jobs:
         run: |
           python - <<'PY'
           import json, os, requests
+          from decimal import Decimal
           alert = json.load(open("lowca_alert_v10.json", encoding="utf-8"))
+          if alert["type"] == "LOWCA_ALERT":
+              heading = f"🚨 ŁOWCA BŁĘDÓW — {alert['level']}"
+          elif alert["level"] == "MEGA_PROMOCJA":
+              heading = "🔥 ŁOWCA — MEGA PROMOCJA"
+          elif alert["level"] == "MOCNA_PROMOCJA":
+              heading = "⚡ ŁOWCA — MOCNA PROMOCJA"
+          else:
+              heading = "🏷️ ŁOWCA — PROMOCJA"
+          reduction = alert.get("reduction_percent")
+          suffix = f" ({Decimal(reduction):.0f}% taniej)" if reduction else ""
           payload = {
               "app_id": os.environ["ONESIGNAL_APP_ID"],
               "target_channel": "push",
               "include_subscription_ids": [os.environ["ONESIGNAL_SUBSCRIPTION_ID"]],
-              "headings": {"en": f"ŁOWCA BŁĘDÓW — {alert['level']}"},
-              "contents": {"en": f"{alert['product']}: {alert['price_old']} zł → {alert['price_new']} zł"},
+              "headings": {"en": heading},
+              "contents": {"en": f"{alert['product']}: {alert['price_old']} zł → {alert['price_new']} zł{suffix}"},
           }
           r = requests.post(
               "https://api.onesignal.com/notifications",
