@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Łowca Błędów v1.1 — automatyczny monitor cen z odkrywaniem produktów."""
+"""Łowca Błędów v1.2 — monitor cen pracujący partiami."""
 from __future__ import annotations
 
 import json
@@ -16,10 +16,14 @@ from lowca_public_product_v10 import fetch_public_product, snapshot_dict
 STATE_FILE = Path(os.getenv("LOWCA_STATE_FILE", "lowca_live_state_v10.json"))
 ALERT_FILE = Path(os.getenv("LOWCA_ALERT_FILE", "lowca_alert_v10.json"))
 MAX_HISTORY = 30
-PROMO_MIN_RATIO = Decimal("0.51")  # 49% obniżki lub więcej
-MEGA_SALE_RATIO = Decimal("0.10")  # 90% obniżki lub więcej
-STRONG_PROMO_RATIO = Decimal("0.20")  # 80–89% obniżki
-DISCOVERY_LIMIT = 300
+PROMO_MIN_RATIO = Decimal("0.51")
+MEGA_SALE_RATIO = Decimal("0.10")
+STRONG_PROMO_RATIO = Decimal("0.20")
+
+# Nie próbujemy sprawdzać setek produktów w jednym przebiegu.
+BATCH_SIZE = 20
+DISCOVERY_LIMIT = 120
+DISCOVERY_REFRESH_HOURS = 6
 
 FALLBACK_PRODUCTS = [
     ("Cyfrowe.pl", "https://www.cyfrowe.pl/aparat-om-system-pen-srebrny-p.html"),
@@ -33,25 +37,26 @@ FALLBACK_PRODUCTS = [
     ("Neonet", "https://www.neonet.pl/p/1169968-ekspres-automatyczny-siemens-te653311rw-eq6-plus.html"),
 ]
 
+
 def load_state():
     if not STATE_FILE.exists():
         return {}
     return json.loads(STATE_FILE.read_text(encoding="utf-8"))
 
+
 def save_state(state):
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
-def build_product_list():
-    try:
-        discover_new_sources()
-    except Exception as exc:
-        print(f"AUTO: pominięto samodzielne odkrywanie: {type(exc).__name__}: {exc}")
+
+def build_product_list(run_discovery: bool):
+    if run_discovery:
+        try:
+            discover_new_sources()
+        except Exception as exc:
+            print(f"AUTO: pominięto samodzielne odkrywanie: {type(exc).__name__}: {exc}")
+
     discovered = discover_all()
-    if discovered:
-        merged = discovered + FALLBACK_PRODUCTS
-    else:
-        print("Nie znaleziono nowych kandydatów — używam listy awaryjnej.")
-        merged = FALLBACK_PRODUCTS
+    merged = (discovered + FALLBACK_PRODUCTS) if discovered else FALLBACK_PRODUCTS
 
     out, seen = [], set()
     for store, url in merged:
@@ -61,14 +66,54 @@ def build_product_list():
             seen.add(key)
         if len(out) >= DISCOVERY_LIMIT:
             break
-    print(f"Łącznie do sprawdzenia: {len(out)} produktów")
+
+    print(f"Łącznie w kolejce: {len(out)} produktów")
     return out
+
 
 def main():
     state, alerts, checked = load_state(), [], 0
-    products = build_product_list()
+    now = datetime.now(timezone.utc)
 
-    for store, url in products:
+    meta = state.get("_meta", {})
+    cached_products = meta.get("products", [])
+    last_discovery = meta.get("last_discovery_at")
+
+    refresh = True
+    if last_discovery and cached_products:
+        try:
+            age_hours = (
+                now - datetime.fromisoformat(last_discovery)
+            ).total_seconds() / 3600
+            refresh = age_hours >= DISCOVERY_REFRESH_HOURS
+        except ValueError:
+            refresh = True
+
+    if refresh:
+        products = build_product_list(run_discovery=True)
+        meta["products"] = [[store, url] for store, url in products]
+        meta["last_discovery_at"] = now.isoformat()
+        meta["batch_index"] = 0
+    else:
+        products = [tuple(item) for item in cached_products]
+        print("AUTO: korzystam z zapisanej kolejki produktów.")
+
+    if not products:
+        products = FALLBACK_PRODUCTS
+
+    batch_index = int(meta.get("batch_index", 0))
+    start = batch_index * BATCH_SIZE
+    if start >= len(products):
+        start = 0
+        batch_index = 0
+
+    batch = products[start:start + BATCH_SIZE]
+    print(
+        f"Partia {batch_index + 1}: produkty {start + 1}-{start + len(batch)} "
+        f"z {len(products)}"
+    )
+
+    for store, url in batch:
         try:
             snapshot = fetch_public_product(url, store)
             checked += 1
@@ -79,14 +124,23 @@ def main():
                 for p in previous.get("history", [])
                 if Decimal(str(p)) > 0
             ]
-            old_price = Decimal(str(previous["price"])) if previous.get("price") else None
+            old_price = (
+                Decimal(str(previous["price"]))
+                if previous.get("price")
+                else None
+            )
 
             result = (
                 analyze_price(old_price, snapshot.price, history)
                 if old_price is not None and old_price != snapshot.price
                 else None
             )
-            ratio = snapshot.price / old_price if old_price and old_price > 0 else None
+            ratio = (
+                snapshot.price / old_price
+                if old_price and old_price > 0
+                else None
+            )
+
             promo_level = None
             if ratio is not None and ratio <= MEGA_SALE_RATIO:
                 promo_level = "MEGA_PROMOCJA"
@@ -97,6 +151,7 @@ def main():
 
             anomaly = result and result.level in {"HIGH", "CRITICAL"}
             signature, alert_record = None, None
+
             if promo_level and not anomaly:
                 signature = f"{url}|{promo_level}|{snapshot.price}"
                 alert_record = {
@@ -112,8 +167,11 @@ def main():
                     "url": url,
                     "ean": snapshot.ean,
                     "sku": snapshot.sku,
-                    "reasons": [f"spadek ceny o {((Decimal("1") - ratio) * 100):.0f}% względem poprzedniego odczytu"],
-                    "checked_at": datetime.now(timezone.utc).isoformat(),
+                    "reasons": [
+                        f"spadek ceny o {((Decimal('1') - ratio) * 100):.0f}% "
+                        "względem poprzedniego odczytu"
+                    ],
+                    "checked_at": now.isoformat(),
                 }
             elif anomaly:
                 signature = f"{url}|{result.level}|{snapshot.price}"
@@ -130,7 +188,7 @@ def main():
                     "ean": snapshot.ean,
                     "sku": snapshot.sku,
                     "reasons": result.reasons,
-                    "checked_at": datetime.now(timezone.utc).isoformat(),
+                    "checked_at": now.isoformat(),
                 }
 
             old_signature = previous.get("last_alert_signature")
@@ -144,8 +202,9 @@ def main():
                 "last_alert_signature": (
                     signature if signature != old_signature else old_signature
                 ),
-                "checked_at": datetime.now(timezone.utc).isoformat(),
+                "checked_at": now.isoformat(),
             }
+
             print(
                 f"{store}: {snapshot.name} | {snapshot.price} {snapshot.currency} "
                 f"| old={old_price} | promo={promo_level or 'BRAK'} "
@@ -154,20 +213,34 @@ def main():
         except Exception as exc:
             print(f"{store}: POMINIĘTO | {url} | {type(exc).__name__}: {exc}")
 
+    # Następna godzina bierze kolejną partię.
+    next_index = batch_index + 1
+    if next_index * BATCH_SIZE >= len(products):
+        next_index = 0
+    meta["batch_index"] = next_index
+    meta["products"] = [[store, url] for store, url in products]
+    state["_meta"] = meta
+
     ALERT_FILE.unlink(missing_ok=True)
     if alerts:
         ALERT_FILE.write_text(
             json.dumps(alerts[0], ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        print("NOWY_ALERT:", alerts[0]["type"], alerts[0]["level"], alerts[0]["product"])
+        print(
+            "NOWY_ALERT:",
+            alerts[0]["type"],
+            alerts[0]["level"],
+            alerts[0]["product"],
+        )
     else:
         print("BRAK_NOWYCH_ALARMÓW")
 
     save_state(state)
-    print(f"Sprawdzono poprawnie: {checked}/{len(products)}")
-    print(f"Łącznie zapisanych produktów w stanie: {len(state)}")
+    print(f"Sprawdzono poprawnie: {checked}/{len(batch)}")
+    print(f"Łącznie zapisanych produktów w stanie: {len(state) - 1}")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
