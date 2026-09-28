@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Łowca Błędów v1.2 — monitor cen pracujący partiami."""
+"""Łowca Błędów v1.3 — szybki monitor cen pracujący partiami."""
 from __future__ import annotations
 
 import json
@@ -20,7 +20,6 @@ PROMO_MIN_RATIO = Decimal("0.51")
 MEGA_SALE_RATIO = Decimal("0.10")
 STRONG_PROMO_RATIO = Decimal("0.20")
 
-# Nie próbujemy sprawdzać setek produktów w jednym przebiegu.
 BATCH_SIZE = 20
 DISCOVERY_LIMIT = 120
 DISCOVERY_REFRESH_HOURS = 6
@@ -48,12 +47,11 @@ def save_state(state):
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def build_product_list(run_discovery: bool):
-    if run_discovery:
-        try:
-            discover_new_sources()
-        except Exception as exc:
-            print(f"AUTO: pominięto samodzielne odkrywanie: {type(exc).__name__}: {exc}")
+def discover_product_list():
+    try:
+        discover_new_sources()
+    except Exception as exc:
+        print(f"AUTO: pominięto samodzielne odkrywanie: {type(exc).__name__}: {exc}")
 
     discovered = discover_all()
     merged = (discovered + FALLBACK_PRODUCTS) if discovered else FALLBACK_PRODUCTS
@@ -67,7 +65,7 @@ def build_product_list(run_discovery: bool):
         if len(out) >= DISCOVERY_LIMIT:
             break
 
-    print(f"Łącznie w kolejce: {len(out)} produktów")
+    print(f"ODKRYWANIE: zapisano kolejkę {len(out)} produktów")
     return out
 
 
@@ -79,7 +77,7 @@ def main():
     cached_products = meta.get("products", [])
     last_discovery = meta.get("last_discovery_at")
 
-    refresh = True
+    refresh = not cached_products
     if last_discovery and cached_products:
         try:
             age_hours = (
@@ -90,13 +88,13 @@ def main():
             refresh = True
 
     if refresh:
-        products = build_product_list(run_discovery=True)
+        products = discover_product_list()
         meta["products"] = [[store, url] for store, url in products]
         meta["last_discovery_at"] = now.isoformat()
         meta["batch_index"] = 0
     else:
         products = [tuple(item) for item in cached_products]
-        print("AUTO: korzystam z zapisanej kolejki produktów.")
+        print("AUTO: szybki tryb — korzystam z zapisanej kolejki produktów.")
 
     if not products:
         products = FALLBACK_PRODUCTS
@@ -168,8 +166,7 @@ def main():
                     "ean": snapshot.ean,
                     "sku": snapshot.sku,
                     "reasons": [
-                        f"spadek ceny o {((Decimal('1') - ratio) * 100):.0f}% "
-                        "względem poprzedniego odczytu"
+                        f"spadek ceny o {((Decimal('1') - ratio) * 100):.0f}% względem poprzedniego odczytu"
                     ],
                     "checked_at": now.isoformat(),
                 }
@@ -213,7 +210,6 @@ def main():
         except Exception as exc:
             print(f"{store}: POMINIĘTO | {url} | {type(exc).__name__}: {exc}")
 
-    # Następna godzina bierze kolejną partię.
     next_index = batch_index + 1
     if next_index * BATCH_SIZE >= len(products):
         next_index = 0
