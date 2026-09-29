@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Łowca Błędów v1.3 — szybki monitor cen pracujący partiami."""
+"""Łowca Błędów v1.4 — szybki monitor cen pracujący partiami."""
 from __future__ import annotations
 
 import json
@@ -77,27 +77,31 @@ def main():
     cached_products = meta.get("products", [])
     last_discovery = meta.get("last_discovery_at")
 
-    refresh = not cached_products
-    if last_discovery and cached_products:
+    # Bez zapisanej kolejki nie uruchamiamy ciężkiego odkrywania.
+    # Łowca ma zawsze wystartować od małej, bezpiecznej listy.
+    if not cached_products:
+        products = FALLBACK_PRODUCTS
+        meta["products"] = [[store, url] for store, url in products]
+        meta["batch_index"] = 0
+        print("START: brak zapisanej kolejki — używam listy awaryjnej.")
+    else:
+        products = [tuple(item) for item in cached_products]
+        print("TRYB SZYBKI: korzystam z zapisanej kolejki produktów.")
+
+    # Odkrywanie jest celowo wyłączone z godzinnego polowania.
+    # Osobny proces może później aktualizować kolejkę.
+    if last_discovery:
         try:
             age_hours = (
                 now - datetime.fromisoformat(last_discovery)
             ).total_seconds() / 3600
-            refresh = age_hours >= DISCOVERY_REFRESH_HOURS
+            if age_hours >= DISCOVERY_REFRESH_HOURS:
+                print(
+                    f"ODKRYWANIE: kolejka ma {age_hours:.1f} h — "
+                    "pozostawiam ją bez zmian; aktualizacja odbywa się osobno."
+                )
         except ValueError:
-            refresh = True
-
-    if refresh:
-        products = discover_product_list()
-        meta["products"] = [[store, url] for store, url in products]
-        meta["last_discovery_at"] = now.isoformat()
-        meta["batch_index"] = 0
-    else:
-        products = [tuple(item) for item in cached_products]
-        print("AUTO: szybki tryb — korzystam z zapisanej kolejki produktów.")
-
-    if not products:
-        products = FALLBACK_PRODUCTS
+            pass
 
     batch_index = int(meta.get("batch_index", 0))
     start = batch_index * BATCH_SIZE
