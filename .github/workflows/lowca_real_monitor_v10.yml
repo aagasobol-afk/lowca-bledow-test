@@ -68,6 +68,26 @@ if products:
 PY
           fi
 
+      - name: Apply discovered queue
+        run: |
+          if [ -f lowca_discovery_queue_v01.json ]; then
+            python - <<'PY'
+import json
+from pathlib import Path
+
+queue = json.loads(Path("lowca_discovery_queue_v01.json").read_text(encoding="utf-8"))
+products = queue.get("products", [])
+state_path = Path("lowca_live_state_v10.json")
+state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+meta = state.setdefault("_meta", {})
+if products:
+    meta["products"] = products
+    meta["batch_index"] = 0
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"DISCOVERY: podłączono nową kolejkę {len(products)} produktów.")
+PY
+          fi
+
       - name: Read prices and analyze
         run: python lowca_live_v10.py
 
