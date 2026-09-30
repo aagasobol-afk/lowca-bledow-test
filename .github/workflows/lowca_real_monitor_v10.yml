@@ -45,6 +45,28 @@ jobs:
           if [ -f previous_state/lowca_source_registry_v01.json ]; then
             cp previous_state/lowca_source_registry_v01.json lowca_source_registry_v01.json
           fi
+          DISCOVERY_RUN_ID=$(gh run list --workflow lowca_discovery_v10.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$DISCOVERY_RUN_ID" ]; then
+            gh run download "$DISCOVERY_RUN_ID" --name lowca-discovery-v01 --dir previous_state/discovery || true
+          fi
+          if [ -f previous_state/discovery/lowca_discovery_queue_v01.json ]; then
+            cp previous_state/discovery/lowca_discovery_queue_v01.json lowca_discovery_queue_v01.json
+          fi
+          if [ -f lowca_discovery_queue_v01.json ]; then
+            python - <<'PY'
+import json
+from pathlib import Path
+p = Path("lowca_discovery_queue_v01.json")
+data = json.loads(p.read_text(encoding="utf-8"))
+products = data.get("products", [])
+if products:
+    Path("lowca_discovered_products_v01.json").write_text(
+        json.dumps(products, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"DISCOVERY: przywrócono kolejkę {len(products)} produktów.")
+PY
+          fi
 
       - name: Read prices and analyze
         run: python lowca_live_v10.py
