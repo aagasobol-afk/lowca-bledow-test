@@ -53,19 +53,7 @@ jobs:
             cp previous_state/discovery/lowca_discovery_queue_v01.json lowca_discovery_queue_v01.json
           fi
           if [ -f lowca_discovery_queue_v01.json ]; then
-            python - <<'PY'
-            import json
-            from pathlib import Path
-            p = Path("lowca_discovery_queue_v01.json")
-            data = json.loads(p.read_text(encoding="utf-8"))
-            products = data.get("products", [])
-            if products:
-                Path("lowca_discovered_products_v01.json").write_text(
-                    json.dumps(products, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                print(f"DISCOVERY: przywrócono kolejkę {len(products)} produktów.")
-            PY
+            python -c 'import json; from pathlib import Path; d=json.loads(Path("lowca_discovery_queue_v01.json").read_text()); p=d.get("products", []); Path("lowca_discovered_products_v01.json").write_text(json.dumps(p, ensure_ascii=False, indent=2)); print(f"DISCOVERY: przywrócono kolejkę {len(p)} produktów.")'
           fi
 
       - name: Apply discovered queue
